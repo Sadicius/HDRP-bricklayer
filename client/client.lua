@@ -1,4 +1,6 @@
 local RSGCore = exports['rsg-core']:GetCoreObject()
+
+local GetHashKey = joaat
 -- Tables --
 local pedstable = {}
 local promptstable = {}
@@ -19,7 +21,7 @@ local jobBlip
 local closestJob = {}
 
 -----------------------------------------
--------------- EXTRA --------------------
+-- EXTRA 
 -----------------------------------------
 -- REMOVE PROPS COMMAND --
 if Config.StuckPropCommand then
@@ -34,8 +36,82 @@ if Config.StuckPropCommand then
     end)
 end
 
+------------------------------------
+-- DRAWTEXT 
+------------------------------------
+
+-- local function DrawText3D(x, y, z, text)
+-- 	local onScreen,_x,_y=GetScreenCoordFromWorldCoord(x, y, z)
+-- 	local px,py,pz=table.unpack(GetGameplayCamCoord())
+-- 	local dist = GetDistanceBetweenCoords(px,py,pz, x,y,z, 1)
+-- 	local str = CreateVarString(10, "LITERAL_STRING", text, Citizen.ResultAsLong())
+-- 	if onScreen then
+-- 	  SetTextScale(0.30, 0.30)
+-- 	  SetTextFontForCurrentCommand(1)
+-- 	  SetTextColor(255, 255, 255, 215)
+-- 	  SetTextCentre(1)
+-- 	  DisplayText(str,_x,_y)
+-- 	  local factor = (string.len(text)) / 225
+-- 	  DrawSprite("feeds", "hud_menu_4a", _x, _y+0.0125,0.015+ factor, 0.03, 0.1, 35, 35, 35, 190, 0)
+-- 	end
+-- end
+
+--------------------------
+-- PED SPAWNING
+--------------------------
+
+local function _GET_DEFAULT_RELATIONSHIP_GROUP_HASH ( iParam0 )
+    return Citizen.InvokeNative( 0x3CC4A718C258BDD0 , iParam0 );
+end
+
+local function SET_PED_RELATIONSHIP_GROUP_HASH ( iVar0, iParam0 )
+    return Citizen.InvokeNative( 0xC80A74AC829DDD92, iVar0, _GET_DEFAULT_RELATIONSHIP_GROUP_HASH( iParam0 ) )
+end
+
+local function modelrequest( model )
+    CreateThread(function()
+        RequestModel( model )
+    end)
+end
+
+CreateThread(function()
+    for z, x in pairs(Config.JobNpc) do
+        while not HasModelLoaded( GetHashKey(Config.JobNpc[z]["Model"]) ) do
+            Wait(500)
+            modelrequest( GetHashKey(Config.JobNpc[z]["Model"]) )
+        end
+        local npc = CreatePed(GetHashKey(Config.JobNpc[z]["Model"]), Config.JobNpc[z]["Pos"].x, Config.JobNpc[z]["Pos"].y, Config.JobNpc[z]["Pos"].z - 1, Config.JobNpc[z]["Heading"], false, false, 0, 0)
+        while not DoesEntityExist(npc) do
+            Wait(300)
+        end
+        exports['rsg-target']:AddTargetModel(Config.JobNpc[z]["Model"], {
+            options = {
+                {
+                    type = "client",
+                    event = "danglr-bricklayer:OpenJobMenu",
+                    icon = "fas fa-person-digging",
+                    style = "",
+                    label = "Brick Job",
+                },
+            },
+            distance = 2.5
+        })
+        Citizen.InvokeNative(0x283978A15512B2FE, npc, true)
+        FreezeEntityPosition(npc, false)
+        SetEntityInvincible(npc, true)
+        TaskStandStill(npc, -1)
+        Wait(100)
+        SET_PED_RELATIONSHIP_GROUP_HASH(npc, GetHashKey(Config.JobNpc[z]["Model"]))
+        SetEntityCanBeDamagedByRelationshipGroup(npc, false, `PLAYER`)
+        SetEntityAsMissionEntity(npc, true, true)
+        SetModelAsNoLongerNeeded(GetHashKey(Config.JobNpc[z]["Model"]))
+        table.insert(pedstable, npc)
+
+    end
+end)
+
 --------------------------------------
--------------- FUNCTIONS -------------
+-- FUNCTIONS
 --------------------------------------
 
 local function PickupBrickLocation()
@@ -52,7 +128,7 @@ local function PickupBrickLocation()
     SetBlipSprite(jobBlip, 1116438174, 1)
     SetBlipScale(jobBlip, 0.05)
 
-    RSGCore.Functions.Notify('Go Grab A Brick', 'error')
+    lib.notify({ title = 'Error', description = 'Go Grab A Brick', type = 'error' })
     --TriggerEvent('rNotify:NotifyLeft', "          Go grab a brick", "", "generic_textures", "tick", 4500)
 end
 
@@ -65,12 +141,12 @@ local function DropBrickLocation()
 
     SetBlipSprite(dropBlip, 1116438174, 0.5)
     SetBlipScale(dropBlip, 0.10)
-
-    RSGCore.Functions.Notify('Head Over To Where This Brick Is Needed', 'error')
+    
+    lib.notify({ title = 'Error', description = 'Head Over To Where This Brick Is Needed', type = 'error' })
 end
 
 --------------------------------------
---------------- THREADS --------------
+-- THREADS 
 --------------------------------------
 CreateThread(function()
 	for _, v in pairs(Config.JobNpc) do
@@ -89,31 +165,62 @@ CreateThread(function()
             local player = PlayerPedId()
             local coords = GetEntityCoords(player)
             if not PickedUp then
-                if GetDistanceBetweenCoords(coords, Config.Locations[closestJob]["BrickLocations"][PickupLocation].coords.x, Config.Locations[closestJob]["BrickLocations"][PickupLocation].coords.y, Config.Locations[closestJob]["BrickLocations"][PickupLocation].coords.z, true) < 1.3  then
-                    DrawText3D(Config.Locations[closestJob]["BrickLocations"][PickupLocation].coords.x, Config.Locations[closestJob]["BrickLocations"][PickupLocation].coords.y, Config.Locations[closestJob]["BrickLocations"][PickupLocation].coords.z, "[G] | Pickup Brick")
-                    if IsControlJustReleased(0, Config.Keys["G"]) then
+                local coordsA = coords
+                local coordsB = vector3(Config.Locations[closestJob]["BrickLocations"][PickupLocation].coords.x, Config.Locations[closestJob]["BrickLocations"][PickupLocation].coords.y, Config.Locations[closestJob]["BrickLocations"][PickupLocation].coords.z)
+                local distance = #(coordsA - coordsB)
+                if distance < 1.3  then
+
+                    --DrawText3D(Config.Locations[closestJob]["BrickLocations"][PickupLocation].coords.x, Config.Locations[closestJob]["BrickLocations"][PickupLocation].coords.y, Config.Locations[closestJob]["BrickLocations"][PickupLocation].coords.z, "[G] | Pickup Brick")
+                    lib.showTextUI("[G] | Pickup Brick", coordsB, {
+                        position = "top-center",
+                        icon = 'fa-solid fa-bars',
+                        style = {
+                            borderRadius = 0,
+                            backgroundColor = '#82283E',
+                            color = 'white'
+                        }
+                    })
+
+                    if IsControlJustReleased(0, RSGCore.Shared.Keybinds[Config.Key]) then
                         TriggerEvent('danglr-bricklayer:PickupBrick')
                         Wait(1000)
                     end
+                else 
+                    lib.hideTextUI()
                 end
             elseif PickedUp and not IsPedRagdoll(PlayerPedId()) then
                 if Config.DisableSprintJump then
                     DisableControlAction(0, 0x8FFC75D6, true) -- Shift
                     DisableControlAction(0, 0xD9D0E1C0, true) -- Spacebar
                 end
-                if GetDistanceBetweenCoords(coords, Config.Locations[closestJob]["DropLocations"][DropLocation].coords.x, Config.Locations[closestJob]["DropLocations"][DropLocation].coords.y, Config.Locations[closestJob]["DropLocations"][DropLocation].coords.z, true) < 1.5  then
-                    DrawText3D(Config.Locations[closestJob]["DropLocations"][DropLocation].coords.x, Config.Locations[closestJob]["DropLocations"][DropLocation].coords.y, Config.Locations[closestJob]["DropLocations"][DropLocation].coords.z, "[G] | Place Brick")
-                    if IsControlJustReleased(0, Config.Keys["G"]) then
+                local coordsA = coords
+                local coordsB = vector3(Config.Locations[closestJob]["DropLocations"][DropLocation].coords.x, Config.Locations[closestJob]["DropLocations"][DropLocation].coords.y, Config.Locations[closestJob]["DropLocations"][DropLocation].coords.z)
+                local distance = #(coordsA - coordsB)
+                if distance < 1.5  then
+                    --DrawText3D(Config.Locations[closestJob]["DropLocations"][DropLocation].coords.x, Config.Locations[closestJob]["DropLocations"][DropLocation].coords.y, Config.Locations[closestJob]["DropLocations"][DropLocation].coords.z, "[G] | Place Brick")
+                    lib.showTextUI("[G] | Place Brick", coordsB, {
+                        position = "top-center",
+                        icon = 'fa-solid fa-bars',
+                        style = {
+                            borderRadius = 0,
+                            backgroundColor = '#82283E',
+                            color = 'white'
+                        }
+                    })
+                    if IsControlJustReleased(0, RSGCore.Shared.Keybinds[Config.Key]) then
                         TriggerEvent('danglr-bricklayer:DropBrick')
                     end
+                else 
+                    lib.hideTextUI()
                 end
             end
         end
     end
 end)
 
+
 --------------------------------------
---------------- EVENTS --------------
+-- EVENTS
 --------------------------------------
 
 RegisterNetEvent('danglr-bricklayer:StartJob', function()
@@ -125,7 +232,10 @@ RegisterNetEvent('danglr-bricklayer:StartJob', function()
             if Config.Prints then
                 print(k)
             end
-            if GetDistanceBetweenCoords(coords, Config.Locations[k]["Location"].x, Config.Locations[k]["Location"].y, Config.Locations[k]["Location"].z, true) < 5 then
+            local coordsA = coords
+            local coordsB = vector3(Config.Locations[k]["Location"].x, Config.Locations[k]["Location"].y, Config.Locations[k]["Location"].z)
+            local distance = #(coordsA - coordsB)
+            if distance < 5 then
                 closestJob = k
             end
         end
@@ -137,7 +247,7 @@ RegisterNetEvent('danglr-bricklayer:StartJob', function()
         end
 
     else
-        RSGCore.Functions.Notify('You already have this job!', 'error')
+        lib.notify({ title = 'Error', description = 'You already have this job!', type = 'error' })
     end
 end)
 
@@ -154,8 +264,9 @@ RegisterNetEvent('danglr-bricklayer:EndJob', function()
             print(hasJob)
         end
     end
-    RSGCore.Functions.Notify('You have stopped working!', 'error')
+
     --TriggerEvent('rNotify:NotifyLeft', "You Have Finished The Job", "", "generic_textures", "tick", 4500)
+    lib.notify({ title = 'Error', description = 'You have stopped working!', type = 'error' })
 end)
 
 RegisterNetEvent('danglr-bricklayer:CollectPaycheck', function()
@@ -167,15 +278,13 @@ RegisterNetEvent('danglr-bricklayer:CollectPaycheck', function()
         RSGCore.Functions.TriggerCallback('danglr-bricklayer:CheckIfPaycheckCollected', function(hasBeenPaid)
             if hasBeenPaid then
                 TriggerEvent('danglr-bricklayer:EndJob')
-                RSGCore.Functions.Notify('You have been paid for your work!', 'error')
-
+                lib.notify({ title = 'Error', description = 'You have been paid for your work!', type = 'error' })
                 if Config.Prints then
                     print(hasBeenPaid)
                 end
 
             else -- Paid the money after initial check IE attempted to exploit
-                RSGCore.Functions.Notify('You have been paid for your work!', 'error')
-
+                lib.notify({ title = 'Error', description = 'You have been paid for your work!', type = 'error' })
                 if Config.Prints then
                     print(hasBeenPaid)
                 end
@@ -183,7 +292,7 @@ RegisterNetEvent('danglr-bricklayer:CollectPaycheck', function()
             end
         end, source)
     else
-        RSGCore.Functions.Notify('You didn\'t do any work!', 'error')
+            lib.notify({ title = 'Error', description = 'You didn\'t do any work!', type = 'error' })
     end
 end)
 
@@ -215,213 +324,88 @@ end)
 
 RegisterNetEvent('danglr-bricklayer:DropBrick', function()
     local coords = GetEntityCoords(PlayerPedId())
-    if hasJob then
-        if DropCount <= Config.DropCount then
 
-            local success = exports['rsg-lock']:StartLockPickCircle( 3, 10 )
-            if success then
-                -- REMOVES THE BRICK PROP --
-                for k, v in pairs(GetGamePool('CObject')) do
-                    if IsEntityAttachedToEntity(PlayerPedId(), v) then
-                        SetEntityAsMissionEntity(v, true, true)
-                        DeleteObject(v)
-                        DeleteEntity(v)
-                    end
-                end
-                ClearPedTasks(PlayerPedId())
-                Wait(100)
-                PickedUp = false
-
-                -- START ANIMATION --
-                TaskStartScenarioInPlace(PlayerPedId(), GetHashKey('world_player_dynamic_kneel'), -1, true, false, false, false)
-                RSGCore.Functions.Progressbar("placebrick", "Placing Brick...", (Config.PlaceTime * 1000), false, true, {
-                    disableMovement = true,
-                    disableCarMovement = false,
-                    disableMouse = false,
-                    disableCombat = true,
-                }, {}, {}, {}, function() -- Done
-
-                    DropCount = DropCount + 1
-
-                    if Config.Prints then
-                        print("Drop Count: "..DropCount)
-                    end
-
-                    RemoveBlip(dropBlip)
-
-                    Wait(100)
-
-                    if DropCount < Config.DropCount then
-                        PickupBrickLocation()
-                    else
-                        RSGCore.Functions.Notify('Work Completed! Go Get Your Check', 'error') 
-                    end
-                end) 
-
-            else
-                SetPedToRagdoll(PlayerPedId(), 1000, 1000, 0, 0, 0, 0)
-                RSGCore.Functions.Notify('Never laid a brick before?! Try again!', 'error')
-                TaskStartScenarioInPlace(PlayerPedId(), GetHashKey('world_player_dynamic_kneel'), -1, true, false, false, false)
-                RSGCore.Functions.Progressbar("placebrick", "Placing Brick...", (Config.PlaceTime * 1000), false, true, {
-                    disableMovement = true,
-                    disableCarMovement = false,
-                    disableMouse = false,
-                    disableCombat = true,
-                }, {}, {}, {}, function() -- Done
-
-                    DropCount = DropCount + 1
-
-                    if Config.Prints then
-                        print("Drop Count: "..DropCount)
-                    end
-
-                    RemoveBlip(dropBlip)
-
-                    Wait(100)
-
-                    for k, v in pairs(GetGamePool('CObject')) do
-                        if IsEntityAttachedToEntity(PlayerPedId(), v) then
-                            SetEntityAsMissionEntity(v, true, true)
-                            DeleteObject(v)
-                            DeleteEntity(v)
-                        end
-                    end
-
-                    if DropCount < Config.DropCount then
-                        success =
-                        PickupBrickLocation()
-                    else
-                        RSGCore.Functions.Notify('Work Completed! Go Get Your Check', 'error') 
-                    end
-                end) 
+    if hasJob and DropCount <= Config.DropCount then
+        -- REMOVES THE BRICK PROP --
+        for k, v in pairs(GetGamePool('CObject')) do
+            if IsEntityAttachedToEntity(PlayerPedId(), v) then
+                SetEntityAsMissionEntity(v, true, true)
+                DeleteObject(v)
+                DeleteEntity(v)
             end
-        else
-            RSGCore.Functions.Notify('Work done! Collect Your Check!', 'error') 
         end
+        ClearPedTasks(PlayerPedId())
+        Wait(100)
+        PickedUp = false
+
+        -- START ANIMATION --
+        TaskStartScenarioInPlace(PlayerPedId(), GetHashKey('world_player_dynamic_kneel'), -1, true, false, false, false)
+        RSGCore.Functions.Progressbar("placebrick", "Placing Brick...", (Config.PlaceTime * 1000), false, true, {
+            disableMovement = true,
+            disableCarMovement = false,
+            disableMouse = false,
+            disableCombat = true,
+        }, {}, {}, {}, function() -- Done
+
+            DropCount = DropCount + 1
+
+            if Config.Prints then
+                print("Drop Count: "..DropCount)
+            end
+
+            RemoveBlip(dropBlip)
+
+            Wait(100)
+
+            if DropCount < Config.DropCount then
+                PickupBrickLocation()
+            else
+                lib.notify({ title = 'Work Completed!', description = 'Go Get Your Check!', type = 'error' })
+            end
+        end) 
+    else
+        lib.notify({ title = 'Work done!', description = 'Collect Your Check!', type = 'error' })
     end
 end)
 
 --------------------------------------
---------------- JOB MENU -------------
+-- JOB MENU
 --------------------------------------
 
 RegisterNetEvent('danglr-bricklayer:OpenJobMenu', function()
 
     if not hasJob then
-
-        jobMenu = {
-            {
-                header = "| Brick Layer Job |",
-                isMenuHeader = true,
-            },
+        lib.registerContext({
+            id = 'brick_menu',
+            title ='Brick Layer Job',
+            options ={
             {
                 header = "Start Brick Layer Job",
-                txt = "",
-                params = {
-                    event = 'danglr-bricklayer:StartJob',
-                }
+                description = "",
+                event = 'danglr-bricklayer:StartJob'
             },
-            {
-                header = "Close Menu",
-                txt = '',
-                params = {
-                    event = '[X] Close Menu',
-                }
-            },
-        }
+            }
+        })
+        lib.showContext('brick_menu')
 
     elseif hasJob then
-
-        jobMenu = {
+        lib.registerContext({
+            id = 'brick_menu',
+            title ='Brick Layer Job',
+            options ={
             {
-                header = "| Brick Layer Job |",
-                isMenuHeader = true,
+                header =  "Finish Job",
+                description = "",
+                event = 'danglr-bricklayer:CollectPaycheck'
             },
-            {
-                header = "Finish Job",
-                txt = "",
-                params = {
-                    event = 'danglr-bricklayer:CollectPaycheck',
-                }
-            },
-            {
-                header = "[X] Close Menu",
-                txt = '',
-                params = {
-                    event = 'rsg-menu:closeMenu',
-                }
-            },
-        }
-
-    end
-
-    exports['rsg-menu']:openMenu(jobMenu)
-end)
-
---------------------------
-------- PED SPAWNING -----
---------------------------
-
-function SET_PED_RELATIONSHIP_GROUP_HASH ( iVar0, iParam0 )
-    return Citizen.InvokeNative( 0xC80A74AC829DDD92, iVar0, _GET_DEFAULT_RELATIONSHIP_GROUP_HASH( iParam0 ) )
-end
-
-function _GET_DEFAULT_RELATIONSHIP_GROUP_HASH ( iParam0 )
-    return Citizen.InvokeNative( 0x3CC4A718C258BDD0 , iParam0 );
-end
-
-function modelrequest( model )
-    CreateThread(function()
-        RequestModel( model )
-    end)
-end
-
-CreateThread(function()
-    for z, x in pairs(Config.JobNpc) do
-        while not HasModelLoaded( GetHashKey(Config.JobNpc[z]["Model"]) ) do
-            Wait(500)
-            modelrequest( GetHashKey(Config.JobNpc[z]["Model"]) )
-        end
-        local npc = CreatePed(GetHashKey(Config.JobNpc[z]["Model"]), Config.JobNpc[z]["Pos"].x, Config.JobNpc[z]["Pos"].y, Config.JobNpc[z]["Pos"].z - 1, Config.JobNpc[z]["Heading"], false, false, 0, 0)
-        while not DoesEntityExist(npc) do
-            Wait(300)
-        end
-        Citizen.InvokeNative(0x283978A15512B2FE, npc, true)
-        FreezeEntityPosition(npc, false)
-        SetEntityInvincible(npc, true)
-        TaskStandStill(npc, -1)
-        Wait(100)
-        SET_PED_RELATIONSHIP_GROUP_HASH(npc, GetHashKey(Config.JobNpc[z]["Model"]))
-        SetEntityCanBeDamagedByRelationshipGroup(npc, false, `PLAYER`)
-        SetEntityAsMissionEntity(npc, true, true)
-        SetModelAsNoLongerNeeded(GetHashKey(Config.JobNpc[z]["Model"]))
-        table.insert(pedstable, npc)
-
+            }
+        })
+        lib.showContext('brick_menu')
     end
 end)
 
 ------------------------------------
------------- DRAWTEXT --------------
-------------------------------------
-
-function DrawText3D(x, y, z, text)
-	local onScreen,_x,_y=GetScreenCoordFromWorldCoord(x, y, z)
-	local px,py,pz=table.unpack(GetGameplayCamCoord())
-	local dist = GetDistanceBetweenCoords(px,py,pz, x,y,z, 1)
-	local str = CreateVarString(10, "LITERAL_STRING", text, Citizen.ResultAsLong())
-	if onScreen then
-	  SetTextScale(0.30, 0.30)
-	  SetTextFontForCurrentCommand(1)
-	  SetTextColor(255, 255, 255, 215)
-	  SetTextCentre(1)
-	  DisplayText(str,_x,_y)
-	  local factor = (string.len(text)) / 225
-	  DrawSprite("feeds", "hud_menu_4a", _x, _y+0.0125,0.015+ factor, 0.03, 0.1, 35, 35, 35, 190, 0)
-	end
-end
-
-------------------------------------
-------- RESOURCE START / STOP -----
+-- RESOURCE START / STOP
 ------------------------------------
 
 AddEventHandler('onResourceStop', function(resource)
