@@ -54,41 +54,53 @@ local function modelrequest( model )
     end)
 end
 
-CreateThread(function()
-    for z, x in pairs(Config.JobNpc) do
-        while not HasModelLoaded( GetHashKey(Config.JobNpc[z]["Model"]) ) do
-            Wait(500)
-            modelrequest( GetHashKey(Config.JobNpc[z]["Model"]) )
-        end
-        local npc = CreatePed(GetHashKey(Config.JobNpc[z]["Model"]), Config.JobNpc[z]["Pos"].x, Config.JobNpc[z]["Pos"].y, Config.JobNpc[z]["Pos"].z - 1, Config.JobNpc[z]["Heading"], false, false, 0, 0)
-        while not DoesEntityExist(npc) do
-            Wait(300)
-        end
-        exports['rsg-target']:AddTargetModel(Config.JobNpc[z]["Model"], {
-            options = {
-                {
-                    type = "client",
-                    event = "danglr-bricklayer:OpenJobMenu",
-                    icon = "fas fa-person-digging",
-                    style = "",
-                    label = "Brick Job",
-                },
-            },
-            distance = 2.5
-        })
-        Citizen.InvokeNative(0x283978A15512B2FE, npc, true)
-        FreezeEntityPosition(npc, false)
-        SetEntityInvincible(npc, true)
-        TaskStandStill(npc, -1)
-        Wait(100)
-        SET_PED_RELATIONSHIP_GROUP_HASH(npc, GetHashKey(Config.JobNpc[z]["Model"]))
-        SetEntityCanBeDamagedByRelationshipGroup(npc, false, `PLAYER`)
-        SetEntityAsMissionEntity(npc, true, true)
-        SetModelAsNoLongerNeeded(GetHashKey(Config.JobNpc[z]["Model"]))
-        table.insert(pedstable, npc)
+local function createJobNPC(model, position, heading)
+    modelrequest(GetHashKey(model))
 
+    while not HasModelLoaded(GetHashKey(model)) do
+        Wait(500)
     end
-end)
+
+    local npc = CreatePed(GetHashKey(model), position.x, position.y, position.z - 1, heading, false, false, 0, 0)
+
+    while not DoesEntityExist(npc) do
+        Wait(500)
+    end
+
+    exports['rsg-target']:AddTargetModel(model, {
+        options = {
+            {
+                type = "client",
+                event = "danglr-bricklayer:OpenJobMenu",
+                icon = "fas fa-person-digging",
+                style = "",
+                label = "Brick Job",
+            },
+        },
+        distance = 2.5
+    })
+
+    Citizen.InvokeNative(0x283978A15512B2FE, npc, true)
+    FreezeEntityPosition(npc, false)
+    SetEntityInvincible(npc, true)
+    TaskStandStill(npc, -1)
+    Wait(100)
+    SET_PED_RELATIONSHIP_GROUP_HASH(npc, GetHashKey(model))
+    SetEntityCanBeDamagedByRelationshipGroup(npc, false, `PLAYER`)
+    SetEntityAsMissionEntity(npc, true, true)
+    SetModelAsNoLongerNeeded(GetHashKey(model))
+    table.insert(pedstable, npc)
+end
+
+-- Función para la gestión de blips
+local function createBlip(model, position, sprite, scale, text)
+    local blip = N_0x554d9d53f696d002(1664425300, position.x, position.y, position.z)
+    SetBlipSprite(blip, sprite, scale)
+    SetBlipScale(blip, BlipScale)
+    Citizen.InvokeNative(0x9CB1A1623062F402, blip, text)
+    table.insert(blipsTable, blip)
+    return blip
+end
 
 --------------------------------------
 -- FUNCTIONS
@@ -129,45 +141,20 @@ end
 -- THREADS 
 --------------------------------------
 CreateThread(function()
-    local blip
-	for _, v in pairs(Config.JobNpc) do
-        blip = N_0x554d9d53f696d002(1664425300, v["Pos"].x, v["Pos"].y, v["Pos"].z)
-        SetBlipSprite(blip, 2305242038, 0.5)
-		SetBlipScale(blip, 0.10)
-		Citizen.InvokeNative(0x9CB1A1623062F402, blip, "Brick Layer Job")
+    for z, x in pairs(Config.JobNpc) do
+        createJobNPC(Config.JobNpc[z]["Model"], Config.JobNpc[z]["Pos"], Config.JobNpc[z]["Heading"])
+        createBlip(Config.JobNpc[z]["Model"], Config.JobNpc[z]["Pos"], 2305242038, 0.5, "Brick Layer Job")
     end
-    table.insert(blipsTable, blip)
 end)
 
 CreateThread(function()
     while true do
-        Wait(500)
+        Wait(50)
         if hasJob then
             local player = PlayerPedId()
             local coords = GetEntityCoords(player)
             if not PickedUp then
-                local coordsA = coords
-                local coordsB = vector3(Config.Locations[closestJob]["BrickLocations"][PickupLocation].coords.x, Config.Locations[closestJob]["BrickLocations"][PickupLocation].coords.y, Config.Locations[closestJob]["BrickLocations"][PickupLocation].coords.z)
-                local distance = #(coordsA - coordsB)
-                if distance < 1.3  then
-
-                    lib.showTextUI("["..Config.Key.."] | Pickup Brick", {
-                        position = "top-center",
-                        icon = 'fa-solid fa-bars',
-                        style = {
-                            borderRadius = 0,
-                            backgroundColor = '#de9602',
-                            color = 'white'
-                        }
-                    })
-
-                    if IsControlJustReleased(0, RSGCore.Shared.Keybinds[Config.Key]) then
-                        TriggerEvent('danglr-bricklayer:PickupBrick')
-                        Wait(1000)
-                    end
-                else 
-                    lib.hideTextUI()
-                end
+                
             elseif PickedUp and not IsPedRagdoll(player) then
                 if Config.DisableSprintJump then
                     DisableControlAction(0, 0x8FFC75D6, true) -- Shift
@@ -195,6 +182,7 @@ CreateThread(function()
                         end
                         if success then
                             TriggerEvent('danglr-bricklayer:DropBrick')
+                            Wait(500)
                         else
                             SetPedToRagdoll(player, 1000, 1000, 0, 0, 0, 0)
                             lib.notify({ title = '¡Intentar otra vez!', description = '¿Nunca has recogido plantas antes?', type = 'error' })
@@ -410,5 +398,6 @@ AddEventHandler('onResourceStop', function(resource)
 		end
         RemoveBlip(jobBlip)
         RemoveBlip(dropBlip)
+        lib.hideTextUI()
     end
 end)
