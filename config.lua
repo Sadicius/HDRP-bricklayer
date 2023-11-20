@@ -4,9 +4,7 @@ Config = {}
 Config.Prints = true -- Used for Debug Prints
 Config.StuckPropCommand = true -- Enables command for stuck props
 Config.DisableSprintJump = true -- Enable to disable sprint / jump while carrying plank
-Config.Keys = {
-    ["G"] = 0x760A9C6F,
-}
+Config.Keys = "G"
 
 -- PAYMENTS / DROP COUNTER --
 Config.Moneytype = 'cash' -- Set to cash or bank
