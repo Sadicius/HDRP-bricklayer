@@ -17,6 +17,7 @@ RSGCore.Functions.CreateCallback('danglr-bricklayer:CheckIfPaycheckCollected', f
     local payment = (DropCount * Config.PayPerDrop)
     if Player.Functions.AddMoney(Config.Moneytype, payment) then -- Removes money type and amount
         DropCount = 0
+        TriggerClientEvent('ox_lib:notify', source, {title = 'Pay', description = 'your recive $' ..payment, type = 'inform' })
         cb(true)
     else
         cb(false)
