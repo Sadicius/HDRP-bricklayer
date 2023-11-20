@@ -36,26 +36,6 @@ if Config.StuckPropCommand then
     end)
 end
 
-------------------------------------
--- DRAWTEXT 
-------------------------------------
-
--- local function DrawText3D(x, y, z, text)
--- 	local onScreen,_x,_y=GetScreenCoordFromWorldCoord(x, y, z)
--- 	local px,py,pz=table.unpack(GetGameplayCamCoord())
--- 	local dist = GetDistanceBetweenCoords(px,py,pz, x,y,z, 1)
--- 	local str = CreateVarString(10, "LITERAL_STRING", text, Citizen.ResultAsLong())
--- 	if onScreen then
--- 	  SetTextScale(0.30, 0.30)
--- 	  SetTextFontForCurrentCommand(1)
--- 	  SetTextColor(255, 255, 255, 215)
--- 	  SetTextCentre(1)
--- 	  DisplayText(str,_x,_y)
--- 	  local factor = (string.len(text)) / 225
--- 	  DrawSprite("feeds", "hud_menu_4a", _x, _y+0.0125,0.015+ factor, 0.03, 0.1, 35, 35, 35, 190, 0)
--- 	end
--- end
-
 --------------------------
 -- PED SPAWNING
 --------------------------
@@ -149,8 +129,9 @@ end
 -- THREADS 
 --------------------------------------
 CreateThread(function()
+    local blip
 	for _, v in pairs(Config.JobNpc) do
-        local blip = N_0x554d9d53f696d002(1664425300, v["Pos"].x, v["Pos"].y, v["Pos"].z)
+        blip = N_0x554d9d53f696d002(1664425300, v["Pos"].x, v["Pos"].y, v["Pos"].z)
         SetBlipSprite(blip, 2305242038, 0.5)
 		SetBlipScale(blip, 0.10)
 		Citizen.InvokeNative(0x9CB1A1623062F402, blip, "Brick Layer Job")
@@ -160,7 +141,7 @@ end)
 
 CreateThread(function()
     while true do
-        Wait(0)
+        Wait(500)
         if hasJob then
             local player = PlayerPedId()
             local coords = GetEntityCoords(player)
@@ -170,13 +151,12 @@ CreateThread(function()
                 local distance = #(coordsA - coordsB)
                 if distance < 1.3  then
 
-                    --DrawText3D(Config.Locations[closestJob]["BrickLocations"][PickupLocation].coords.x, Config.Locations[closestJob]["BrickLocations"][PickupLocation].coords.y, Config.Locations[closestJob]["BrickLocations"][PickupLocation].coords.z, "[G] | Pickup Brick")
-                    lib.showTextUI("[G] | Pickup Brick", coordsB, {
+                    lib.showTextUI("["..Config.Key.."] | Pickup Brick", {
                         position = "top-center",
                         icon = 'fa-solid fa-bars',
                         style = {
                             borderRadius = 0,
-                            backgroundColor = '#82283E',
+                            backgroundColor = '#de9602',
                             color = 'white'
                         }
                     })
@@ -188,7 +168,7 @@ CreateThread(function()
                 else 
                     lib.hideTextUI()
                 end
-            elseif PickedUp and not IsPedRagdoll(PlayerPedId()) then
+            elseif PickedUp and not IsPedRagdoll(player) then
                 if Config.DisableSprintJump then
                     DisableControlAction(0, 0x8FFC75D6, true) -- Shift
                     DisableControlAction(0, 0xD9D0E1C0, true) -- Spacebar
@@ -197,27 +177,36 @@ CreateThread(function()
                 local coordsB = vector3(Config.Locations[closestJob]["DropLocations"][DropLocation].coords.x, Config.Locations[closestJob]["DropLocations"][DropLocation].coords.y, Config.Locations[closestJob]["DropLocations"][DropLocation].coords.z)
                 local distance = #(coordsA - coordsB)
                 if distance < 1.5  then
-                    --DrawText3D(Config.Locations[closestJob]["DropLocations"][DropLocation].coords.x, Config.Locations[closestJob]["DropLocations"][DropLocation].coords.y, Config.Locations[closestJob]["DropLocations"][DropLocation].coords.z, "[G] | Place Brick")
-                    lib.showTextUI("[G] | Place Brick", coordsB, {
+                    lib.showTextUI("["..Config.Key.."] | Place Brick", {
                         position = "top-center",
                         icon = 'fa-solid fa-bars',
                         style = {
                             borderRadius = 0,
-                            backgroundColor = '#82283E',
+                            backgroundColor = '#de9602',
                             color = 'white'
                         }
                     })
                     if IsControlJustReleased(0, RSGCore.Shared.Keybinds[Config.Key]) then
-                        TriggerEvent('danglr-bricklayer:DropBrick')
+                        local success
+                        if not Config.DoMiniGame then
+                            success = true
+                        else
+                            success = lib.skillCheck({{areaSize = 50, speedMultiplier = 0.5}}, {'w', 'a', 's', 'd'})
+                        end
+                        if success then
+                            TriggerEvent('danglr-bricklayer:DropBrick')
+                        else
+                            SetPedToRagdoll(player, 1000, 1000, 0, 0, 0, 0)
+                            lib.notify({ title = '¡Intentar otra vez!', description = '¿Nunca has recogido plantas antes?', type = 'error' })
+                        end
                     end
-                else 
+                else
                     lib.hideTextUI()
                 end
             end
         end
     end
 end)
-
 
 --------------------------------------
 -- EVENTS
@@ -362,7 +351,7 @@ RegisterNetEvent('danglr-bricklayer:DropBrick', function()
             else
                 lib.notify({ title = 'Work Completed!', description = 'Go Get Your Check!', type = 'error' })
             end
-        end) 
+        end)
     else
         lib.notify({ title = 'Work done!', description = 'Collect Your Check!', type = 'error' })
     end
@@ -380,7 +369,7 @@ RegisterNetEvent('danglr-bricklayer:OpenJobMenu', function()
             title ='Brick Layer Job',
             options ={
             {
-                header = "Start Brick Layer Job",
+                title = "Start Brick Layer Job",
                 description = "",
                 event = 'danglr-bricklayer:StartJob'
             },
@@ -390,17 +379,17 @@ RegisterNetEvent('danglr-bricklayer:OpenJobMenu', function()
 
     elseif hasJob then
         lib.registerContext({
-            id = 'brick_menu',
+            id = 'brick_2menu',
             title ='Brick Layer Job',
             options ={
             {
-                header =  "Finish Job",
+                title =  "Finish Job",
                 description = "",
                 event = 'danglr-bricklayer:CollectPaycheck'
             },
             }
         })
-        lib.showContext('brick_menu')
+        lib.showContext('brick_2menu')
     end
 end)
 
